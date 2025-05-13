@@ -1,6 +1,6 @@
 # HFBRI-MAE
 
-## HFBRI-MAE: Handcrafted Feature Based Rotation-Invariant Masked Autoencoder for 3D Point Cloud Analysis, [ArXiv]([https://arxiv.org/abs/2504.14132])
+## HFBRI-MAE: Handcrafted Feature Based Rotation-Invariant Masked Autoencoder for 3D Point Cloud Analysis, [ArXiv](https://arxiv.org/abs/2504.14132)
 
 
 
