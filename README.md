@@ -40,8 +40,7 @@ We use ShapeNet, ScanObjectNN, ModelNet40, ShapeNetPart and OmniObject3D in this
 |  Classification | ScanObjectNN |[finetune_scan_objonly.yaml](./cfgs/finetune_scan_objonly.yaml)| 
 |  Classification | ModelNet40 |[finetune_modelnet.yaml](./cfgs/finetune_modelnet.yaml)| 
 |  Classification | OmniObject3D |[finetune_omniobject3d.yaml](./cfgs/finetune_omniobject3d.yaml)| 
-| Part segmentation| ShapeNetPart| [segmentation](./segmentation)|  
-    
+| Part segmentation| ShapeNetPart| [segmentation](./segmentation)|      
 |  Few-shot learning | ModelNet40 |[fewshot.yaml](./cfgs/fewshot.yaml)|
 
 ## 4. HFBRI-MAE Pre-training
