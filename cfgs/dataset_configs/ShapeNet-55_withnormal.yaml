@@ -1,0 +1,3 @@
+NAME: ShapeNet_withnormal
+PC_PATH: data/ShapeNet55_withnormal
+N_POINTS: 2048
