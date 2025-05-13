@@ -44,18 +44,16 @@ We use ShapeNet, ScanObjectNN, ModelNet40, ShapeNetPart and OmniObject3D in this
 |  Classification | ModelNet40 |[finetune_modelnet.yaml](./cfgs/finetune_modelnet.yaml)| 
 |  Classification | OmniObject3D |[finetune_omniobject3d.yaml](./cfgs/finetune_omniobject3d.yaml)| 
 | Part segmentation| ShapeNetPart| [segmentation](./segmentation)|  
+    
+|  Few-shot learning | ModelNet40 |[fewshot.yaml](./cfgs/fewshot.yaml)|
 
-|  Task | Dataset | Config | 5w10s Acc. (%)| 5w20s Acc. (%)| 10w10s Acc. (%)| 10w20s Acc. (%)|     
-|  ----- | ----- |-----|  -----| -----|-----|-----|
-|  Few-shot learning | ModelNet40 |[fewshot.yaml](./cfgs/fewshot.yaml)| 96.3 ± 2.5| 97.8 ± 1.8| 92.6 ± 4.1| 95.0 ± 3.0| 
-
-## 4. Point-MAE Pre-training
+## 4. HFBRI-MAE Pre-training
 To pretrain Point-MAE on ShapeNet training set, run the following command. If you want to try different models or masking ratios etc., first create a new config file, and pass its path to --config.
 
 ```
 CUDA_VISIBLE_DEVICES=<GPU> python main.py --config cfgs/pretrain.yaml --exp_name <output_file_name>
 ```
-## 5. Point-MAE Fine-tuning
+## 5. HFBRI-MAE Fine-tuning
 
 Fine-tuning on ScanObjectNN, run:
 ```
