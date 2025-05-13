@@ -1,0 +1,17 @@
+from .build import build_model_from_cfg
+import models.Point_MAE
+import models.HFBRI_MAE
+import models.Point_MAE_RIConv2
+import models.Point_MAE_RIConv3
+import models.Point_MAE_RIConv4
+import models.Point_MAE_RIConv_localconcatglobal
+import models.Point_MAE_RIConv_deepfeats
+import models.Point_MAE_RIConv_deepfeats_noattention
+import models.Point_M2AE_RIConv
+import models.Point_MAE_RIConv_localandglobalattn
+import models.Point_MAE_RIConv_POD
+import models.Point_MAE_RISurConv
+import models.Point_MAE_Conbination
+import models.Point_MAE_ConbinationRelLRF
+import models.RIMAE
+import models.pointnet2_utils as pointnet2_utils
