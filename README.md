@@ -4,7 +4,7 @@
 
 
 <div  align="center">    
- <img src="./figure/net.jpg" width = "666"  align=center />
+ <img src="./figure/net.pdf" width = "666"  align=center />
 </div>
 
 ## 1. Requirements
