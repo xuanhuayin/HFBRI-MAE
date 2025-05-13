@@ -20,7 +20,7 @@ dataset : {
   test : { _base_: cfgs/dataset_configs/ScanObjectNN_objectonly.yaml,
             others: {subset: 'test'}}}
 model : {
-  NAME: PointTransformer1,
+  NAME: PointTransformer,
   trans_dim: 384,
   depth: 12,
   drop_path_rate: 0.1,
