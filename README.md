@@ -3,9 +3,6 @@
 ## HFBRI-MAE: Handcrafted Feature Based Rotation-Invariant Masked Autoencoder for 3D Point Cloud Analysis, [ArXiv]([https://arxiv.org/abs/2504.14132])
 
 
-<div  align="center">    
- <img src="./figure/net.jpg" width = "666"  align=center />
-</div>
 
 ## 1. Requirements
 PyTorch >= 1.7.0 < 1.11.0;
