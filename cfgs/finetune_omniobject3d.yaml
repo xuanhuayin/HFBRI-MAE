@@ -20,14 +20,12 @@ dataset : {
   test : { _base_: cfgs/dataset_configs/OmniObject3D_1k.yaml,
             others: {subset: 'test', shuffle: False}}}
 model : {
-  NAME: PointTransformerConbinationRelLRF,
+  NAME: PointTransformer,
   trans_dim: 384,
   depth: 12,
   drop_path_rate: 0.1,
   cls_dim: 216,
   num_heads: 6,
-#  group_sizes: 32,
-#  num_groups: 128,
   group_size: 64,
   num_group: 256,
   encoder_dims: 384,
