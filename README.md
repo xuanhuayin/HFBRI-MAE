@@ -85,4 +85,13 @@ python main.py --ckpts <path/to/pre-trained/model> --root path/to/data --learnin
 
 Our codes are built upon [Point-MAE](https://github.com/Pang-Yatian/Point-MAE), [RIConv++](https://github.com/cszyzhang/riconv2), [Pointnet2_PyTorch](https://github.com/erikwijmans/Pointnet2_PyTorch) and [Pointnet_Pointnet2_pytorch](https://github.com/yanx27/Pointnet_Pointnet2_pytorch)
 
+## Reference
+```
+@article{yin2025hfbri,
+  title={HFBRI-MAE: Handcrafted Feature Based Rotation-Invariant Masked Autoencoder for 3D Point Cloud Analysis},
+  author={Yin, Xuanhua and Zhang, Dingxin and Yu, Jianhui and Cai, Weidong},
+  journal={arXiv preprint arXiv:2504.14132},
+  year={2025}
+}
+```
 
