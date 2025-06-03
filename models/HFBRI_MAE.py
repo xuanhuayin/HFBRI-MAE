@@ -13,14 +13,11 @@ from knn_cuda import KNN
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 
 
-# from pointnet2_utils import farthest_point_sample
-
 
 class RI_encoder(nn.Module):
     def __init__(self, encoder_channel):
         super(RI_encoder, self).__init__()
 
-        # self.nsample = nsample
         self.prev_mlp_convs = nn.ModuleList()
         self.prev_mlp_bns = nn.ModuleList()
         self.mlp_convs = nn.ModuleList()
@@ -66,6 +63,14 @@ class RI_encoder(nn.Module):
 
 
 def compute_LRA(xyz, weighting=False, nsample=64):
+    """
+    Input:
+        xyz: point cloud data, [B, N, 3]
+        weighting: boolean flag to apply distance-based weighting, default=False
+        nsample: number of nearest neighbors to consider, default=64
+    Return:
+        LRA: local reference axis (normal vector) for each point, [B, N, 3]
+    """
     dists = torch.cdist(xyz, xyz)
 
     dists, idx = torch.topk(dists, nsample, dim=-1, largest=False, sorted=False)
@@ -73,7 +78,6 @@ def compute_LRA(xyz, weighting=False, nsample=64):
 
     group_xyz = index_points(xyz, idx)
     group_xyz = group_xyz - xyz.unsqueeze(2)
-    # print('xyz.shape', xyz.shape)
 
     if weighting:
         dists_max, _ = dists.max(dim=2, keepdim=True)
@@ -101,6 +105,18 @@ def compute_LRA(xyz, weighting=False, nsample=64):
 
 
 def RI_features(xyz, centers, center_norms, idx, pts, norm_ori):
+    """
+    Input:
+        xyz: point cloud data, [B, N, K, 3]
+        centers: sampled center points, [B, S, 3]
+        center_norms: normals of center points, [B, S, 3]
+        idx: indices of nearest neighbors for each center, [B, S, K]
+        pts: original point cloud data, [B, N, 3]
+        norm_ori: original normals of the point cloud, [B, N, 3]
+    Return:
+        ri_feat: rotation-invariant features, [B, S, K, 8]
+        idx_ordered: reordered indices based on sorted angles, [B, S, K]
+    """
     B, S, C = centers.shape
 
     new_norm = center_norms.unsqueeze(-1)
@@ -108,9 +124,6 @@ def RI_features(xyz, centers, center_norms, idx, pts, norm_ori):
 
     epsilon = 1e-7
     grouped_xyz = index_points(pts, idx_ordered)  # [B, npoint, nsample, C]
-    # print('neighborhood.shape', xyz.shape)
-    # print('norm.shape', norm.shape)
-    # print('idx', idx.shape)
     grouped_xyz_distance = torch.norm(grouped_xyz, dim=-1, keepdim=True)
     grouped_xyz_local = grouped_xyz - centers.view(B, S, 1, C)  # treat orgin as center
     grouped_xyz_length = torch.norm(grouped_xyz_local, dim=-1, keepdim=True)  # nn lengths
@@ -223,6 +236,16 @@ def index_points(points, idx):
 
 
 def order_index(xyz, new_xyz, new_norm, idx):
+    """
+    Input:
+        xyz: grouped point cloud data, [B, S, K, 3]
+        new_xyz: sampled center points, [B, S, 3]
+        new_norm: normals of center points, [B, S, 3]
+        idx: indices of nearest neighbors, [B, S, K]
+    Return:
+        dots_sorted: sorted dot products for ordering, [B, S, K, 1]
+        idx_ordered: reordered indices based on sorted angles, [B, S, K]
+    """
     B, S, C = new_xyz.shape
     nsample = xyz.shape[2]
     grouped_xyz = xyz
@@ -249,45 +272,6 @@ def order_index(xyz, new_xyz, new_norm, idx):
     idx_ordered = idx.gather(2, indices.squeeze_(-1))
 
     return dots_sorted, idx_ordered
-
-
-# def square_distance(src, dst):
-#     """
-#     Calculate Euclid distance between each two points.
-#
-#     src^T * dst = xn * xm + yn * ym + zn * zm；
-#     sum(src^2, dim=-1) = xn*xn + yn*yn + zn*zn;
-#     sum(dst^2, dim=-1) = xm*xm + ym*ym + zm*zm;
-#     dist = (xn - xm)^2 + (yn - ym)^2 + (zn - zm)^2
-#          = sum(src**2,dim=-1)+sum(dst**2,dim=-1)-2*src^T*dst
-#
-#     Input:
-#         src: source points, [B, N, C]
-#         dst: target points, [B, M, C]
-#     Output:
-#         dist: per-point square distance, [B, N, M]
-#     """
-#     B, N, _ = src.shape
-#     _, M, _ = dst.shape
-#     dist = -2 * torch.matmul(src, dst.permute(0, 2, 1))
-#     dist += torch.sum(src ** 2, -1).view(B, N, 1)
-#     dist += torch.sum(dst ** 2, -1).view(B, 1, M)
-#     return dist
-
-
-# def knn_point(nsample, xyz, new_xyz):
-#     """
-#     Input:
-#         nsample: max sample number in local region
-#         xyz: all points, [B, N, C]
-#         new_xyz: query points, [B, S, C]
-#     Return:
-#         group_idx: grouped points index, [B, S, nsample]
-#     """
-#     sqrdists = square_distance(new_xyz, xyz)
-#     _, group_idx = torch.topk(
-#         sqrdists, nsample, dim=-1, largest=False, sorted=False)
-#     return group_idx
 
 
 def knn(xyz, centroids, k):
@@ -422,7 +406,6 @@ class TransformerEncoder(nn.Module):
             for i in range(depth)])
 
     def forward(self, x, pos):
-        # features = []
         for _, block in enumerate(self.blocks):
             x = block(x + pos)
         return x
@@ -462,6 +445,12 @@ class TransformerDecoder(nn.Module):
 
 
 def get_robust_centroid(input):
+    """
+    Input:
+        input: grouped point cloud data, [B, N, K, 3]
+    Return:
+        centroid_avg: robust centroid for each group, [B, N, 3]
+    """
     # input: [B, N, K, 3]
     batch_size, point_num, neighbor_size, _ = input.shape
     subset_size = int(round(neighbor_size * 0.9))  # select 90% of K
@@ -525,7 +514,14 @@ def calculate_radius(grouped_xyz):
 
 
 def Global_feature(new_xyz, radius, grouped_xyz):
-    # grouped_xyz = index_points(pts, idx)
+    """
+    Input:
+        new_xyz: center points, [B, N, 3]
+        radius: scalar radius for intersection point calculation
+        grouped_xyz: grouped point cloud data, [B, N, k, 3]
+    Return:
+        center_point_features: global geometric features, [B, N, 5]
+    """
     centroid_xyz = get_robust_centroid(grouped_xyz)  # [B, N, 3]
 
     # calculate intersection point
@@ -935,9 +931,6 @@ class PointTransformer(nn.Module):
         radius = calculate_radius(neighborhood)
         RI_global_feat = Global_feature(center, radius, grouped_xyz)
         pos = self.pos_embed(RI_global_feat)
-
-        rel_ori = self.rel_embed(group_input_tokens)
-        x = self.blocks(group_input_tokens, rel_ori)
 
         x = self.blocks(group_input_tokens, pos)
         x = self.norm(x)

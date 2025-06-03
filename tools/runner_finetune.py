@@ -18,21 +18,12 @@ from sklearn.svm import SVC
 
 train_transforms = transforms.Compose(
     [
-         # data_transforms.PointcloudScale(),
-         # data_transforms.PointcloudRotate(),
-         # data_transforms.PointcloudTranslate(),
-         # data_transforms.PointcloudJitter(),
-         # data_transforms.PointcloudRandomInputDropout(),
-         # data_transforms.RandomHorizontalFlip(),
          data_transforms.PointcloudScaleAndTranslate(),
     ]
 )
 
 test_transforms = transforms.Compose(
     [
-        # data_transforms.PointcloudScale(),
-        # data_transforms.PointcloudRotate(),
-        # data_transforms.PointcloudTranslate(),
         data_transforms.PointcloudScaleAndTranslate(),
     ]
 )
@@ -61,20 +52,11 @@ class Acc_Metric:
 def run_net(args, config, train_writer=None, val_writer=None):
     logger = get_logger(args.log_name)
     # build dataset
-    # (train_sampler, train_dataloader), (_, test_dataloader),= builder.dataset_builder(args, config.dataset.train), \
-    #                                                         builder.dataset_builder(args, config.dataset.val)
     (train_sampler, train_dataloader)= builder.dataset_builder(args, config.dataset.train)
     (_, test_dataloader) = builder.dataset_builder(args, config.dataset.val)
 
     # build model
     base_model = builder.model_builder(config.model)
-
-    # for param in base_model.parameters():
-    #     param.requires_grad = False
-    #
-    #     # 只对分类头进行fine-tune
-    # for param in base_model.cls_head_finetune.parameters():
-    #     param.requires_grad = True
     
     # parameter setting
     start_epoch = 0
@@ -105,25 +87,15 @@ def run_net(args, config, train_writer=None, val_writer=None):
     else:
         print_log('Using Data parallel ...' , logger = logger)
         base_model = nn.DataParallel(base_model).cuda()
-    # for name, param in base_model.named_parameters():
-    #     if "cls_head_finetune" not in name:
-    #         param.requires_grad = False
     for name, param in base_model.named_parameters():
         print(f"{name}: requires_grad={param.requires_grad}")
 
     # optimizer & scheduler
     optimizer, scheduler = builder.build_opti_sche(base_model, config)
-    # optimizer, scheduler = builder.build_opti_sche(filter(lambda p: p.requires_grad, base_model.parameters()), config)
-    # optimizer, scheduler = builder.build_opti_sche(base_model.module.cls_head_finetune.parameters(), config)
-    # optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, base_model.parameters()),
-    #                               lr=config.optimizer.kwargs.lr, weight_decay=config.optimizer.kwargs.weight_decay)
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.scheduler.kwargs.epochs, eta_min=0,
-    #                                                        last_epoch=-1)
 
     if args.resume:
         builder.resume_optimizer(optimizer, args, logger = logger)
 
-    # trainval
     # training
     base_model.zero_grad()
     for epoch in range(start_epoch, config.max_epoch + 1):
@@ -210,10 +182,6 @@ def run_net(args, config, train_writer=None, val_writer=None):
             batch_time.update(time.time() - batch_start_time)
             batch_start_time = time.time()
 
-            # if idx % 10 == 0:
-            #     print_log('[Epoch %d/%d][Batch %d/%d] BatchTime = %.3f (s) DataTime = %.3f (s) Loss+Acc = %s lr = %.6f' %
-            #                 (epoch, config.max_epoch, idx + 1, n_batches, batch_time.val(), data_time.val(),
-            #                 ['%.4f' % l for l in losses.val()], optimizer.param_groups[0]['lr']), logger = logger)
         if isinstance(scheduler, list):
             for item in scheduler:
                 item.step(epoch)
