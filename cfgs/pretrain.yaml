@@ -27,18 +27,6 @@ dataset : {
          test: { _base_: cfgs/dataset_configs/ModelNet40_SVM.yaml,
                    others: {partition: 'test', num_points: 1024}}}}
 
-transformer_config: {
-   mask_ratio: 0.6,
-   mask_type: 'rand',
-   trans_dim: 384,
-   encoder_dims: 384,
-   depth: 12,
-   drop_path_rate: 0.1,
-   num_heads: 8,
-   decoder_depth: 4,
-   decoder_num_heads: 8,
-   radius: 0.3
- }
 model : {
  NAME: HFBRI_MAE,
  group_size: 64,
