@@ -19,14 +19,7 @@ from pointnet2_ops import pointnet2_utils
 
 train_transforms = transforms.Compose(
     [
-        # data_transforms.PointcloudScale(),
-        # data_transforms.PointcloudRotate(),
-        # data_transforms.PointcloudRotatePerturbation(),
-        # data_transforms.PointcloudTranslate(),
-        # data_transforms.PointcloudJitter(),
-        # data_transforms.PointcloudRandomInputDropout(),
         data_transforms.PointcloudScaleAndTranslate(),
-        # data_transforms.PointcloudScaleAnisotropic(scale_low=0.8, scale_high=1.2),
     ]
 )
 
@@ -225,20 +218,10 @@ def run_net(args, config, train_writer=None, val_writer=None):
             (epoch,  epoch_end_time - epoch_start_time, ['%.4f' % l for l in losses.avg()],
              optimizer.param_groups[0]['lr']), logger = logger)
 
-        # if epoch % args.val_freq == 0 and epoch != 0:
-        #     # Validate the current model
-        #     metrics = validate(base_model, extra_train_dataloader, test_dataloader, epoch, val_writer, args, config, logger=logger)
-        #
-        #     # Save ckeckpoints
-        #     if metrics.better_than(best_metrics):
-        #         best_metrics = metrics
-        #         builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, 'ckpt-best', args, logger = logger)
         builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, 'ckpt-last', args, logger = logger)
         if epoch % 25 ==0 and epoch >=250:
             builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, f'ckpt-epoch-{epoch:03d}', args,
                                     logger=logger)
-        # if (config.max_epoch - epoch) < 10:
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, f'ckpt-epoch-{epoch:03d}', args, logger = logger)
         ## Prepare svm train and RISurConv_attn data
 
         feats_train_aligned = []
@@ -248,12 +231,6 @@ def run_net(args, config, train_writer=None, val_writer=None):
         for i, (data, label) in enumerate(train_dataloader_svm):
             labels = list(map(lambda x: x[0], label.numpy().tolist()))
             data = data.cuda().contiguous()
-
-            # if args.train_svm_rot == 'z':
-            #     trot = RotateAxisAngle(angle=torch.rand(n_batches) * 360, axis="Z", degrees=True).to('cuda')
-            # elif args.train_svm_rot == 'so3':
-            #     trot = Rotate(R=random_rotations(n_batches)).to('cuda')
-            # data = trot.transform_points(data)
             with torch.no_grad():
                 feats = base_model(data, eval=True)
             feats = feats.detach().cpu().numpy()
@@ -270,7 +247,6 @@ def run_net(args, config, train_writer=None, val_writer=None):
             # print('batch_size_train', batch_size)
             labels = list(map(lambda x: x[0], label.numpy().tolist()))
             data = data.cuda().contiguous()
-
             trot = Rotate(R=random_rotations(batch_size)).to('cuda')
             data = trot.transform_points(data)
             with torch.no_grad():
@@ -296,18 +272,13 @@ def run_net(args, config, train_writer=None, val_writer=None):
             for feat in feats:
                 feats_train_z.append(feat)
             labels_train_z += labels
-        #
+            
         feats_test_aligned = []
         labels_test_aligned = []
 
         for i, (data, label) in enumerate(test_dataloader_svm):
             labels = list(map(lambda x: x[0], label.numpy().tolist()))
             data = data.cuda().contiguous()
-            # if args.test_svm_rot == 'z':
-            #     trot = RotateAxisAngle(angle=torch.rand(n_batches) * 360, axis="Z", degrees=True).to('cuda')
-            # elif args.test_svm_rot == 'so3':
-            #     trot = Rotate(R=random_rotations(n_batches)).to('cuda')
-            # data = trot.transform_points(data)
             with torch.no_grad():
                 feats = base_model(data, eval=True)
             feats = feats.detach().cpu().numpy()
@@ -348,7 +319,7 @@ def run_net(args, config, train_writer=None, val_writer=None):
                 feats_test_so3.append(feat)
             labels_test_so3 += labels
 
-        ### (base: so3 svm_train: aligned svm_test: aligned)eval with SVM ###
+        ### (svm_train: aligned)eval with SVM ###
         feats_train = np.array(feats_train_aligned)
         labels_train = np.array(labels_train_aligned)
 
@@ -365,27 +336,14 @@ def run_net(args, config, train_writer=None, val_writer=None):
         test_accuracy_az = model_tl.score(feats_test_z, labels_test_z)
         test_accuracy_as = model_tl.score(feats_test_so3, labels_test_so3)
 
-        print_log(f"Linear Accuracy (base: aligned svm_train: aligned svm_test: aligned): {test_accuracy_aa}",
+        print_log(f"Linear Accuracy (svm_train: aligned svm_test: aligned): {test_accuracy_aa}",
                   logger=logger)
-        print_log(f"Linear Accuracy (base: aligned svm_train: aligned svm_test: z): {test_accuracy_az}",
+        print_log(f"Linear Accuracy (svm_train: aligned svm_test: z): {test_accuracy_az}",
                   logger=logger)
-        print_log(f"Linear Accuracy (base: aligned svm_train: aligned svm_test: so3): {test_accuracy_as}",
+        print_log(f"Linear Accuracy (svm_train: aligned svm_test: so3): {test_accuracy_as}",
                   logger=logger)
-        # if test_accuracy_aligned > best_accuracy:
-        #     best_accuracy = test_accuracy_so3
-        #     print_log(f"(base: aligned svm_train: aligend svm_test: so3)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: aligned svm_test: so3)ckpt-best', args,
-        #                             logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: aligned svm_test: so3)ckpt-last', args, logger=logger)
 
-        #
-        ### (base: so3 svm_train: aligned svm_test: z)eval with SVM ###
-
-        # feats_test = np.array(feats_test_z)
-        # labels_test = np.array(labels_test_z)
+        ### (svm_train: z)eval with SVM ###
         feats_train = np.array(feats_train_z)
         labels_train = np.array(labels_train_z)
 
@@ -395,25 +353,13 @@ def run_net(args, config, train_writer=None, val_writer=None):
         test_accuracy_zz = model_tl.score(feats_test_z, labels_test_z)
         test_accuracy_zs = model_tl.score(feats_test_so3, labels_test_so3)
 
-        print_log(f"Linear Accuracy (base: aligned svm_train: z svm_test: aligned): {test_accuracy_za}", logger=logger)
-        print_log(f"Linear Accuracy (base: aligned svm_train: z svm_test: z): {test_accuracy_zz}",
+        print_log(f"Linear Accuracy (svm_train: z svm_test: aligned): {test_accuracy_za}", logger=logger)
+        print_log(f"Linear Accuracy (svm_train: z svm_test: z): {test_accuracy_zz}",
                   logger=logger)
-        print_log(f"Linear Accuracy (base: aligned svm_train: z svm_test: so3): {test_accuracy_zs}",
-                  logger=logger)
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: aligned svm_test: z)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: aligned svm_test: z)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: aligned svm_test: z)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: aligned svm_test: z)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
-        #
-        ### (base: so3 svm_train: aligned svm_test: so3)eval with SVM ###
+        print_log(f"Linear Accuracy (svm_train: z svm_test: so3): {test_accuracy_zs}",
+
+                  
+        ### (svm_train: so3)eval with SVM ###
 
         feats_train = np.array(feats_train_so3)
         labels_train = np.array(labels_train_so3)
@@ -424,11 +370,11 @@ def run_net(args, config, train_writer=None, val_writer=None):
         test_accuracy_sz = model_tl.score(feats_test_z, labels_test_z)
         test_accuracy_ss = model_tl.score(feats_test_so3, labels_test_so3)
 
-        print_log(f"Linear Accuracy (base: aligned svm_train: so3 svm_test: aligned): {test_accuracy_sa}",
+        print_log(f"Linear Accuracy (svm_train: so3 svm_test: aligned): {test_accuracy_sa}",
                   logger=logger)
-        print_log(f"Linear Accuracy (base: aligned svm_train: so3 svm_test: z): {test_accuracy_sz}",
+        print_log(f"Linear Accuracy (svm_train: so3 svm_test: z): {test_accuracy_sz}",
                   logger=logger)
-        print_log(f"Linear Accuracy (base: aligned svm_train: so3 svm_test: so3): {test_accuracy_ss}",
+        print_log(f"Linear Accuracy (svm_train: so3 svm_test: so3): {test_accuracy_ss}",
                   logger=logger)
 
         ave_acc = (test_accuracy_sa + test_accuracy_sz + test_accuracy_ss + test_accuracy_aa + test_accuracy_az + test_accuracy_as + test_accuracy_za + test_accuracy_zz + test_accuracy_zs)/9
@@ -441,161 +387,6 @@ def run_net(args, config, train_writer=None, val_writer=None):
                       logger=logger)
 
 
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: aligned svm_test: so3)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: aligned svm_test: z)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: aligned svm_test: so3)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: aligned svm_test: so3)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
-        #
-        # ### (base: so3 svm_train: z svm_test: aligned) eval with SVM ###
-        #
-        # feats_train = np.array(feats_train_z)
-        # labels_train = np.array(labels_train_z)
-        #
-        # feats_test = np.array(feats_test_aligned)
-        # labels_test = np.array(labels_test_aligned)
-        #
-        # model_tl = SVC(C=0.01, kernel='linear')
-        # model_tl.fit(feats_train, labels_train)
-        # test_accuracy = model_tl.score(feats_test, labels_test)
-        #
-        # print_log(f"Linear Accuracy (base: aligned svm_train: z svm_test: aligned): {test_accuracy}", logger=logger)
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: aligned svm_test: aligned)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: z svm_test: aligned)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: z svm_test: aligned)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: z svm_test: aligned)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
-        #
-        # ### (base: z svm_train: z svm_test: z) eval with SVM ###
-        #
-        # feats_test = np.array(feats_test_z)
-        # labels_test = np.array(labels_test_z)
-        #
-        # # model_tl = SVC(C=0.01, kernel='linear')
-        # # model_tl.fit(feats_train, labels_train)
-        # test_accuracy = model_tl.score(feats_test, labels_test)
-        #
-        # print_log(f"Linear Accuracy (base: aligned svm_train: z svm_test: z): {test_accuracy}", logger=logger)
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: z svm_test: z)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: z svm_test: z)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: z svm_test: z)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: z svm_test: z)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
-        #
-        # ### (base: so3 svm_train: z svm_test: so3) eval with SVM ###
-        #
-        # feats_test = np.array(feats_test_so3)
-        # labels_test = np.array(labels_test_so3)
-        #
-        # # model_tl = SVC(C=0.01, kernel='linear')
-        # # model_tl.fit(feats_train, labels_train)
-        # test_accuracy = model_tl.score(feats_test, labels_test)
-        #
-        # print_log(f"Linear Accuracy (base: aligned svm_train: z svm_test: so3): {test_accuracy}", logger=logger)
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: z svm_test: so3)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: z svm_test: so3)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: z svm_test: so3)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: z svm_test: so3)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
-        #
-        # ### (base: so3 svm_train: so3 svm_test: aligned) eval with SVM ###
-        # feats_train = np.array(feats_train_so3)
-        # labels_train = np.array(labels_train_so3)
-        #
-        # feats_test = np.array(feats_test_aligned)
-        # labels_test = np.array(labels_test_aligned)
-        #
-        # model_tl = SVC(C=0.01, kernel='linear')
-        # model_tl.fit(feats_train, labels_train)
-        # test_accuracy = model_tl.score(feats_test, labels_test)
-        #
-        # print_log(f"Linear Accuracy (base: aligned svm_train: so3 svm_test: aligned): {test_accuracy}", logger=logger)
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: so3 svm_test: aligned)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: so3 svm_test: aligned)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: so3 svm_test: aligned)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: so3 svm_test: aligned)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
-        #
-        # ### (base: so3 svm_train: so3 svm_test: z) eval with SVM ###
-        #
-        # feats_test = np.array(feats_test_z)
-        # labels_test = np.array(labels_test_z)
-        #
-        # # model_tl = SVC(C=0.01, kernel='linear')
-        # # model_tl.fit(feats_train, labels_train)
-        # test_accuracy = model_tl.score(feats_test, labels_test)
-        #
-        # print_log(f"Linear Accuracy (base: aligned svm_train: so3 svm_test: z): {test_accuracy}", logger=logger)
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: so3 svm_test: z)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: so3 svm_test: z)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: so3 svm_test: z)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: so3 svm_test: z)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
-        #
-        # ### (base: so3 svm_train: so3 svm_test: so3) eval with SVM ###
-        #
-        # feats_test = np.array(feats_test_so3)
-        # labels_test = np.array(labels_test_so3)
-        #
-        # # model_tl = SVC(C=0.01, kernel='linear')
-        # # model_tl.fit(feats_train, labels_train)
-        # test_accuracy = model_tl.score(feats_test, labels_test)
-        #
-        # print_log(f"Linear Accuracy (base: aligned svm_train: so3 svm_test: so3): {test_accuracy}", logger=logger)
-        # if test_accuracy > best_accuracy:
-        #     best_accuracy = test_accuracy
-        #     print_log(f"(base: aligned svm_train: so3 svm_test: so3)Saving best...", logger=logger)
-        #     builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                             '(base: aligned svm_train: so3 svm_test: so3)ckpt-best', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         '(base: aligned svm_train: so3 svm_test: so3)ckpt-last', args, logger=logger)
-        #
-        # builder.save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics,
-        #                         f'(base: aligned svm_train: so3 svm_test: so3)ckpt-epoch-{epoch:03d}', args,
-        #                         logger=logger)
     if train_writer is not None:
         train_writer.close()
     if val_writer is not None:
