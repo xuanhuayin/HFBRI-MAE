@@ -317,7 +317,7 @@ class Group(nn.Module):  # FPS + KNN
         self.group_size = group_size
         self.knn = KNN(k=self.group_size, transpose_mode=True)
 
-    def forward(self, xyz, normf=None, radius=None):
+    def forward(self, xyz, norm=None, radius=None):
         '''
             input: B N 3
             ---------------------------
