@@ -10,14 +10,52 @@ from utils.checkpoint import get_missing_parameters_message, get_unexpected_para
 from utils.logger import *
 import random
 from knn_cuda import KNN
-from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 
+import torch
+import torch.nn as nn
 
+class ChamferDistanceL2(nn.Module):
+    """
+    Chamfer Distance L2 between two point clouds xyz1 and xyz2.
+    """
+    def __init__(self, ignore_zeros=False):
+        super().__init__()
+        self.ignore_zeros = ignore_zeros
+
+    def forward(self, xyz1, xyz2):
+        """
+        Args:
+            xyz1: (B, N, 3)
+            xyz2: (B, M, 3)
+        Returns:
+            chamfer distance: scalar
+        """
+        if self.ignore_zeros:
+            mask1 = torch.sum(xyz1, dim=2).ne(0)  # (B, N)
+            mask2 = torch.sum(xyz2, dim=2).ne(0)  # (B, M)
+            xyz1 = [x[m] for x, m in zip(xyz1, mask1)]
+            xyz2 = [x[m] for x, m in zip(xyz2, mask2)]
+            xyz1 = torch.stack([torch.nn.functional.pad(x, (0, 0, 0, xyz1[0].size(0) - x.size(0))) for x in xyz1])
+            xyz2 = torch.stack([torch.nn.functional.pad(x, (0, 0, 0, xyz2[0].size(0) - x.size(0))) for x in xyz2])
+
+        B, N, _ = xyz1.size()
+        _, M, _ = xyz2.size()
+
+        # Compute pairwise distance
+        dist_matrix = torch.cdist(xyz1, xyz2, p=2)  # (B, N, M)
+
+        # For each point in xyz1, find closest point in xyz2
+        dist1 = torch.min(dist_matrix, dim=2)[0]  # (B, N)
+        # For each point in xyz2, find closest point in xyz1
+        dist2 = torch.min(dist_matrix, dim=1)[0]  # (B, M)
+
+        return (torch.mean(dist1 ** 2) + torch.mean(dist2 ** 2))
 
 class RI_encoder(nn.Module):
     def __init__(self, encoder_channel):
         super(RI_encoder, self).__init__()
 
+        # self.nsample = nsample
         self.prev_mlp_convs = nn.ModuleList()
         self.prev_mlp_bns = nn.ModuleList()
         self.mlp_convs = nn.ModuleList()
@@ -40,7 +78,6 @@ class RI_encoder(nn.Module):
 
     def forward(self, xyz, centers, center_norms, idx, pts, norm_ori):
         xyz = xyz.contiguous()
-        # ri_feat, idx_ordered = sample_and_group(xyz, centers, norm, center_norms, idx, pts, norm_ori)
         ri_feat, idx_ordered = RI_features(xyz, centers, center_norms, idx, pts, norm_ori)
 
         # lift
@@ -62,15 +99,10 @@ class RI_encoder(nn.Module):
         return ri_feat.permute(0, 2, 1)
 
 
+
+
+
 def compute_LRA(xyz, weighting=False, nsample=64):
-    """
-    Input:
-        xyz: point cloud data, [B, N, 3]
-        weighting: boolean flag to apply distance-based weighting, default=False
-        nsample: number of nearest neighbors to consider, default=64
-    Return:
-        LRA: local reference axis (normal vector) for each point, [B, N, 3]
-    """
     dists = torch.cdist(xyz, xyz)
 
     dists, idx = torch.topk(dists, nsample, dim=-1, largest=False, sorted=False)
@@ -78,6 +110,7 @@ def compute_LRA(xyz, weighting=False, nsample=64):
 
     group_xyz = index_points(xyz, idx)
     group_xyz = group_xyz - xyz.unsqueeze(2)
+    # print('xyz.shape', xyz.shape)
 
     if weighting:
         dists_max, _ = dists.max(dim=2, keepdim=True)
@@ -104,19 +137,10 @@ def compute_LRA(xyz, weighting=False, nsample=64):
 
 
 
+#     return xyz, basis
+
+
 def RI_features(xyz, centers, center_norms, idx, pts, norm_ori):
-    """
-    Input:
-        xyz: point cloud data, [B, N, K, 3]
-        centers: sampled center points, [B, S, 3]
-        center_norms: normals of center points, [B, S, 3]
-        idx: indices of nearest neighbors for each center, [B, S, K]
-        pts: original point cloud data, [B, N, 3]
-        norm_ori: original normals of the point cloud, [B, N, 3]
-    Return:
-        ri_feat: rotation-invariant features, [B, S, K, 8]
-        idx_ordered: reordered indices based on sorted angles, [B, S, K]
-    """
     B, S, C = centers.shape
 
     new_norm = center_norms.unsqueeze(-1)
@@ -124,6 +148,9 @@ def RI_features(xyz, centers, center_norms, idx, pts, norm_ori):
 
     epsilon = 1e-7
     grouped_xyz = index_points(pts, idx_ordered)  # [B, npoint, nsample, C]
+    # print('neighborhood.shape', xyz.shape)
+    # print('norm.shape', norm.shape)
+    # print('idx', idx.shape)
     grouped_xyz_distance = torch.norm(grouped_xyz, dim=-1, keepdim=True)
     grouped_xyz_local = grouped_xyz - centers.view(B, S, 1, C)  # treat orgin as center
     grouped_xyz_length = torch.norm(grouped_xyz_local, dim=-1, keepdim=True)  # nn lengths
@@ -162,6 +189,7 @@ def RI_features(xyz, centers, center_norms, idx, pts, norm_ori):
                          grouped_xyz_inner_angle_0,
                          grouped_xyz_inner_angle_1,
                          grouped_xyz_inner_angle_2], dim=-1)
+
 
     return ri_feat, idx_ordered
 
@@ -236,16 +264,6 @@ def index_points(points, idx):
 
 
 def order_index(xyz, new_xyz, new_norm, idx):
-    """
-    Input:
-        xyz: grouped point cloud data, [B, S, K, 3]
-        new_xyz: sampled center points, [B, S, 3]
-        new_norm: normals of center points, [B, S, 3]
-        idx: indices of nearest neighbors, [B, S, K]
-    Return:
-        dots_sorted: sorted dot products for ordering, [B, S, K, 1]
-        idx_ordered: reordered indices based on sorted angles, [B, S, K]
-    """
     B, S, C = new_xyz.shape
     nsample = xyz.shape[2]
     grouped_xyz = xyz
@@ -274,6 +292,7 @@ def order_index(xyz, new_xyz, new_norm, idx):
     return dots_sorted, idx_ordered
 
 
+
 def knn(xyz, centroids, k):
     """
     Input:
@@ -298,7 +317,7 @@ class Group(nn.Module):  # FPS + KNN
         self.group_size = group_size
         self.knn = KNN(k=self.group_size, transpose_mode=True)
 
-    def forward(self, xyz, norm=None, radius=None):
+    def forward(self, xyz, normf=None, radius=None):
         '''
             input: B N 3
             ---------------------------
@@ -445,12 +464,6 @@ class TransformerDecoder(nn.Module):
 
 
 def get_robust_centroid(input):
-    """
-    Input:
-        input: grouped point cloud data, [B, N, K, 3]
-    Return:
-        centroid_avg: robust centroid for each group, [B, N, 3]
-    """
     # input: [B, N, K, 3]
     batch_size, point_num, neighbor_size, _ = input.shape
     subset_size = int(round(neighbor_size * 0.9))  # select 90% of K
@@ -514,14 +527,6 @@ def calculate_radius(grouped_xyz):
 
 
 def Global_feature(new_xyz, radius, grouped_xyz):
-    """
-    Input:
-        new_xyz: center points, [B, N, 3]
-        radius: scalar radius for intersection point calculation
-        grouped_xyz: grouped point cloud data, [B, N, k, 3]
-    Return:
-        center_point_features: global geometric features, [B, N, 5]
-    """
     centroid_xyz = get_robust_centroid(grouped_xyz)  # [B, N, 3]
 
     # calculate intersection point
@@ -737,7 +742,6 @@ class HFBRI_MAE(nn.Module):
             self.loss_func = ChamferDistanceL2().cuda()
         else:
             raise NotImplementedError
-            # self.loss_func = emd().cuda()
 
     def forward(self, pts, pts_ori=None, vis=False, eval=False, **kwargs):
         norm_ori = compute_LRA(pts)
@@ -782,20 +786,16 @@ class HFBRI_MAE(nn.Module):
         B, M, C = x_rec.shape
         rebuild_points = self.increase_dim(x_rec.transpose(1, 2)).transpose(1, 2).reshape(B * M, -1, 3)  # B M 1024
 
-        gt_points = neighborhood_ori[mask].reshape(B * M, -1, 3)
-        loss1 = self.loss_func(rebuild_points, gt_points)
-
-        if vis:  # visualization
-            vis_points = neighborhood_ori[~mask].reshape(B * (self.num_group - M), -1, 3)
-            full_vis = vis_points + center[~mask].unsqueeze(1)
-            full_rebuild = rebuild_points + center[mask].unsqueeze(1)
-            full = torch.cat([full_vis, full_rebuild], dim=0)
-            full_center = torch.cat([center[mask], center[~mask]], dim=0)
-            ret2 = full_vis.reshape(-1, 3).unsqueeze(0)
-            ret1 = full.reshape(-1, 3).unsqueeze(0)
-            return ret1, ret2, full_center
-        else:
+        try:
+            gt_points = neighborhood_ori[mask].reshape(B * M, -1, 3)
+            # print(gt_points[0][0])
+            loss1 = self.loss_func(rebuild_points, gt_points)
+            # print(loss1)
             return loss1
+
+        except:
+            print('error')
+
 
 
 # finetune model
